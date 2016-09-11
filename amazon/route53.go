@@ -10,15 +10,15 @@ import (
 	"pault.ag/go/dnsync/dns"
 )
 
-type Entry struct {
+type Client struct {
 	client *route53.Route53
 	auth   aws.Auth
 	region aws.Region
 	zone   string
 }
 
-func New(auth aws.Auth, region aws.Region, zone string) Entry {
-	return Entry{
+func New(auth aws.Auth, region aws.Region, zone string) Client {
+	return Client{
 		auth:   auth,
 		region: region,
 		zone:   zone,
@@ -26,7 +26,7 @@ func New(auth aws.Auth, region aws.Region, zone string) Entry {
 	}
 }
 
-func (e Entry) List(root string) (dns.Hosts, error) {
+func (e Client) List(root string) (dns.Hosts, error) {
 	if res, err := e.client.ListResourceRecordSets(e.zone, nil); err == nil {
 		hosts := dns.Hosts{}
 		for _, el := range res.Records {
@@ -49,7 +49,7 @@ func (e Entry) List(root string) (dns.Hosts, error) {
 
 }
 
-func (e Entry) Update(entries []route53.Change) (*route53.ChangeResourceRecordSetsResponse, error) {
+func (e Client) Update(entries []route53.Change) (*route53.ChangeResourceRecordSetsResponse, error) {
 	return e.client.ChangeResourceRecordSets(
 		e.zone,
 		&route53.ChangeResourceRecordSetsRequest{Changes: entries},

@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"pault.ag/go/config"
 
 	"github.com/mitchellh/goamz/aws"
+	"golang.org/x/exp/inotify"
 
 	"pault.ag/go/dnsync/amazon"
 	"pault.ag/go/dnsync/dns"
@@ -25,24 +27,27 @@ func ohshit(err error) {
 	}
 }
 
-func main() {
-	conf := Config{Leases: "/var/lib/misc/dnsmasq.leases"}
-	flags, err := config.LoadFlags("dnsync", &conf)
+func Sync(conf Config, client amazon.Client) {
+	watcher, err := inotify.NewWatcher()
 	ohshit(err)
-	flags.Parse(os.Args[1:])
-
-	if conf.RootDomainName == "" || conf.Zone == "" {
-		panic("No root domain or zone configured")
+	ohshit(watcher.Watch(filepath.Dir(conf.Leases)))
+	for {
+		select {
+		case ev := <-watcher.Event:
+			if ((ev.Mask ^ inotify.IN_CLOSE_WRITE) != 0) || ev.Name != conf.Leases {
+				continue
+			}
+			Update(conf, client)
+		}
 	}
+}
 
-	fd, err := os.Open(conf.Leases)
-	ohshit(err)
-
-	auth, err := aws.EnvAuth()
-	client := amazon.New(auth, aws.USWest2, conf.Zone)
+func Update(conf Config, client amazon.Client) {
 	awsEntries, err := client.List(conf.RootDomainName)
 	ohshit(err)
 
+	fd, err := os.Open(conf.Leases)
+	ohshit(err)
 	leases, err := dnsmasq.Parse(fd)
 	ohshit(err)
 
@@ -53,10 +58,25 @@ func main() {
 
 	if len(change) == 0 {
 		fmt.Printf("Nothing needs to be done!\n")
-		os.Exit(0)
+		return
 	}
 	records, err := client.Update(change)
 	ohshit(err)
-
 	fmt.Printf("%s\n", records)
+}
+
+func main() {
+	conf := Config{Leases: "/var/lib/misc/dnsmasq.leases"}
+	flags, err := config.LoadFlags("dnsync", &conf)
+	ohshit(err)
+	flags.Parse(os.Args[1:])
+
+	if conf.RootDomainName == "" || conf.Zone == "" {
+		panic("No root domain or zone configured")
+	}
+
+	auth, err := aws.EnvAuth()
+	client := amazon.New(auth, aws.USWest2, conf.Zone)
+
+	Sync(conf, client)
 }
