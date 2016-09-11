@@ -28,13 +28,16 @@ func ohshit(err error) {
 }
 
 func Sync(conf Config, client amazon.Client) {
+	Update(conf, client)
+
 	watcher, err := inotify.NewWatcher()
 	ohshit(err)
 	ohshit(watcher.Watch(filepath.Dir(conf.Leases)))
 	for {
 		select {
 		case ev := <-watcher.Event:
-			if ((ev.Mask ^ inotify.IN_CLOSE_WRITE) != 0) || ev.Name != conf.Leases {
+			fmt.Printf("%s %s %s\n", ev.Mask, ev.Name, ev)
+			if ((ev.Mask ^ inotify.IN_MODIFY) != 0) || ev.Name != conf.Leases {
 				continue
 			}
 			Update(conf, client)
