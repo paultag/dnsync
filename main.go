@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -16,9 +17,10 @@ import (
 )
 
 type Config struct {
-	Zone           string `flag:"zone" description:"AWS Route 53 Zone ID"`
-	RootDomainName string `flag:"root-domain-name" description:"Root domain name (like paultag.house)"`
-	Leases         string `flag:"leases" description:"Leases file path"`
+	Zone            string `flag:"zone" description:"AWS Route 53 Zone ID"`
+	RootDomainName  string `flag:"root-domain-name" description:"Root domain name (like paultag.house)"`
+	Leases          string `flag:"leases" description:"Leases file path"`
+	PublicInterface string `flag:"public-interface" description:"public interface (like eth0)"`
 }
 
 func ohshit(err error) {
@@ -27,8 +29,39 @@ func ohshit(err error) {
 	}
 }
 
+func PublicIP(conf Config) *dns.Host {
+	ifaces, err := net.Interfaces()
+	ohshit(err)
+	for _, i := range ifaces {
+		if i.Name != conf.PublicInterface {
+			continue
+		}
+		addrs, err := i.Addrs()
+		ohshit(err)
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			return &dns.Host{
+				FQDN: conf.RootDomainName,
+				IP:   ip,
+			}
+		}
+	}
+	return nil
+}
+
 func Sync(conf Config, client amazon.Client) {
-	Update(conf, client)
+	publicIp := PublicIP(conf)
+	if publicIp == nil {
+		panic(fmt.Errorf("No public IP found; interface name wrong?"))
+	}
+
+	Update(*publicIp, conf, client)
 
 	watcher, err := inotify.NewWatcher()
 	ohshit(err)
@@ -40,12 +73,12 @@ func Sync(conf Config, client amazon.Client) {
 			if ((ev.Mask ^ inotify.IN_MODIFY) != 0) || ev.Name != conf.Leases {
 				continue
 			}
-			Update(conf, client)
+			Update(*publicIp, conf, client)
 		}
 	}
 }
 
-func Update(conf Config, client amazon.Client) {
+func Update(publicIp dns.Host, conf Config, client amazon.Client) {
 	awsEntries, err := client.List(conf.RootDomainName)
 	ohshit(err)
 
@@ -55,6 +88,7 @@ func Update(conf Config, client amazon.Client) {
 	ohshit(err)
 
 	hosts := leases.Hosts(conf.RootDomainName)
+	hosts = append(hosts, publicIp)
 
 	change := dns.Change(awsEntries, hosts)
 	fmt.Printf("%s\n", change)
@@ -69,7 +103,11 @@ func Update(conf Config, client amazon.Client) {
 }
 
 func main() {
-	conf := Config{Leases: "/var/lib/misc/dnsmasq.leases"}
+	conf := Config{
+		Leases:          "/var/lib/misc/dnsmasq.leases",
+		PublicInterface: "eth0",
+	}
+
 	flags, err := config.LoadFlags("dnsync", &conf)
 	ohshit(err)
 	flags.Parse(os.Args[1:])

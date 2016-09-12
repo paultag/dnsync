@@ -34,7 +34,7 @@ func (e Client) List(root string) (dns.Hosts, error) {
 				continue
 			}
 			name := strings.ToLower(el.Name)
-			if strings.HasSuffix(root, el.Name) {
+			if el.Name != root && strings.HasSuffix(root, el.Name) {
 				continue
 			}
 			hosts = append(hosts, dns.Host{
