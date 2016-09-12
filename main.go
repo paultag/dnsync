@@ -51,17 +51,13 @@ func PublicIP(conf Config) *dns.Host {
 				IP:   ip,
 			}
 		}
+		/* Oh jeez, no IP but we found the interface */
 	}
 	return nil
 }
 
 func Sync(conf Config, client amazon.Client) {
-	publicIp := PublicIP(conf)
-	if publicIp == nil {
-		panic(fmt.Errorf("No public IP found; interface name wrong?"))
-	}
-
-	Update(*publicIp, conf, client)
+	Update(conf, client)
 
 	watcher, err := inotify.NewWatcher()
 	ohshit(err)
@@ -73,12 +69,12 @@ func Sync(conf Config, client amazon.Client) {
 			if ((ev.Mask ^ inotify.IN_MODIFY) != 0) || ev.Name != conf.Leases {
 				continue
 			}
-			Update(*publicIp, conf, client)
+			Update(conf, client)
 		}
 	}
 }
 
-func Update(publicIp dns.Host, conf Config, client amazon.Client) {
+func Update(conf Config, client amazon.Client) {
 	awsEntries, err := client.List(conf.RootDomainName)
 	ohshit(err)
 
@@ -87,8 +83,17 @@ func Update(publicIp dns.Host, conf Config, client amazon.Client) {
 	leases, err := dnsmasq.Parse(fd)
 	ohshit(err)
 
-	hosts := leases.Hosts(conf.RootDomainName)
-	hosts = append(hosts, publicIp)
+	publicIp := PublicIP(conf)
+	rootDomainName := conf.RootDomainName
+
+	hosts := leases.Hosts(rootDomainName)
+
+	if publicIp == nil {
+		fmt.Printf("No public IP found, not messing with the root domain")
+		rootDomainName = "." + rootDomainName
+	} else {
+		hosts = append(hosts, *publicIp)
+	}
 
 	change := dns.Change(awsEntries, hosts)
 	fmt.Printf("%s\n", change)
