@@ -103,7 +103,7 @@ func Update(conf Config, client amazon.Client) {
 		return
 	}
 	records, err := client.Update(change)
-	ohshit(err)
+	fmt.Printf("%s\n", err)
 	fmt.Printf("%s\n", records)
 }
 
