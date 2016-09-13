@@ -76,7 +76,10 @@ func Sync(conf Config, client amazon.Client) {
 
 func Update(conf Config, client amazon.Client) {
 	awsEntries, err := client.List(conf.RootDomainName)
-	ohshit(err)
+	if err != nil {
+		fmt.Printf("Error! %s\n", err)
+		return
+	}
 
 	fd, err := os.Open(conf.Leases)
 	ohshit(err)
