@@ -9,7 +9,7 @@ import (
 	"pault.ag/go/config"
 
 	"github.com/mitchellh/goamz/aws"
-	"golang.org/x/exp/inotify"
+	inotify "gopkg.in/fsnotify.v0"
 
 	"pault.ag/go/dnsync/amazon"
 	"pault.ag/go/dnsync/dns"
@@ -65,8 +65,8 @@ func Sync(conf Config, client amazon.Client) {
 	for {
 		select {
 		case ev := <-watcher.Event:
-			fmt.Printf("%s %s %s\n", ev.Mask, ev.Name, ev)
-			if ((ev.Mask ^ inotify.IN_MODIFY) != 0) || ev.Name != conf.Leases {
+			fmt.Printf("%s %s\n", ev.Name, ev)
+			if !ev.IsModify() || ev.Name != conf.Leases {
 				continue
 			}
 			Update(conf, client)

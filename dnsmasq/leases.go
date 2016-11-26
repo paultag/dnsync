@@ -27,6 +27,13 @@ func (l Lease) Host(domain string) dns.Host {
 	}
 }
 
+func (l Lease) MACHost(domain string) dns.Host {
+	return dns.Host{
+		FQDN: strings.ToLower(fmt.Sprintf("%s.by-mac.%s", strings.Replace(l.MAC.String(), ":", "-", -1), domain)),
+		IP:   l.IP,
+	}
+}
+
 type Leases []Lease
 
 func (l Leases) Hosts(domain string) dns.Hosts {
@@ -36,6 +43,7 @@ func (l Leases) Hosts(domain string) dns.Hosts {
 			continue
 		}
 		ret = append(ret, el.Host(domain))
+		ret = append(ret, el.MACHost(domain))
 	}
 	return ret
 }
