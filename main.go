@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"pault.ag/go/config"
 
@@ -58,6 +59,7 @@ func PublicIP(conf Config) *dns.Host {
 
 func Sync(conf Config, client amazon.Client) {
 	Update(conf, client)
+	lastUpdated := time.Now()
 
 	watcher, err := inotify.NewWatcher()
 	ohshit(err)
@@ -69,6 +71,12 @@ func Sync(conf Config, client amazon.Client) {
 			if !ev.IsModify() || ev.Name != conf.Leases {
 				continue
 			}
+
+			if time.Since(lastUpdated) < (time.Second * 5) {
+				continue
+			}
+
+			lastUpdated = time.Now()
 			Update(conf, client)
 		}
 	}
