@@ -22,6 +22,7 @@ type Config struct {
 	RootDomainName  string `flag:"root-domain-name" description:"Root domain name (like paultag.house)"`
 	Leases          string `flag:"leases" description:"Leases file path"`
 	PublicInterface string `flag:"public-interface" description:"public interface (like eth0)"`
+	Network         string `flag:"network" description:"CIDR to limit updates to"`
 }
 
 func ohshit(err error) {
@@ -89,6 +90,9 @@ func Update(conf Config, client amazon.Client) {
 		return
 	}
 
+	_, network, err := net.ParseCIDR(conf.Network)
+	ohshit(err)
+
 	fd, err := os.Open(conf.Leases)
 	ohshit(err)
 	leases, err := dnsmasq.Parse(fd)
@@ -97,7 +101,7 @@ func Update(conf Config, client amazon.Client) {
 	publicIp := PublicIP(conf)
 	rootDomainName := conf.RootDomainName
 
-	hosts := leases.Hosts(rootDomainName)
+	hosts := leases.InCIDR(network).Hosts(rootDomainName)
 
 	if publicIp == nil {
 		fmt.Printf("No public IP found, not messing with the root domain")
